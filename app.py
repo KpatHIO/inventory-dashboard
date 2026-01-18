@@ -148,7 +148,6 @@ def format_dates_in_df(df, date_col_name):
 # --- 4. APP LAYOUT ---
 st.title("📦 Inventory Command")
 
-# RESTORED: Top Controls (Not in sidebar, accessible on mobile top)
 c1, c2, c3 = st.columns([1, 2, 1])
 with c1: chosen_start_date = st.date_input("Start Date", value=date.today())
 with c2: 
@@ -168,7 +167,7 @@ skus, inbound, outbound = load_data_from_sheets()
 if not skus.empty:
     df_processed = calculate_inventory(skus, inbound, outbound, chosen_start_date, days_map[view_option])
     
-    # --- MAIN VIEW: TABS (Summary vs Daily) ---
+    # --- MAIN VIEW: TABS ---
     if not df_processed.empty:
         unique_months = df_processed['Month_Label'].unique()
         
@@ -197,25 +196,25 @@ if not skus.empty:
                 df_month = df_processed[df_processed['Month_Label'] == month]
                 st.dataframe(style_dataframe(df_month, is_summary=False), use_container_width=True, height=500)
         
-        # --- DEEP DIVE SECTION (With Graph + Filters) ---
+        # --- DEEP DIVE SECTION ---
         st.divider()
         st.subheader("🔍 Deep Dive & Visuals")
         
-        # RESTORED: Search Options
         drill_mode = st.radio("Inspect by:", ["Item (Graph)", "Purchase Order (PO)", "Customer Order"], horizontal=True)
 
         if drill_mode == "Item (Graph)":
             selected_desc = st.selectbox("Select Item:", sorted(skus['description'].unique()))
             selected_id = skus[skus['description'] == selected_desc]['sku_id'].iloc[0]
             
-            # 1. THE GRAPH (You liked this)
+            # 1. THE GRAPH
             item_data = df_processed[df_processed['Description'] == selected_desc].copy()
             safety_level = skus[skus['sku_id'] == selected_id]['safety_threshold'].iloc[0]
             
             fig = px.line(item_data, x='Date', y='Stock', title=f"Stock Projection: {selected_desc}", markers=True)
             fig.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="Zero")
             fig.add_hline(y=safety_level, line_dash="dot", line_color="orange", annotation_text="Safety")
-            fig.update_layout(xaxis_title="", yaxis_title="Stock", height=350, margin=dict(l=20, r=20, t=40, b=20))
+            # FIX: Increased top margin (t=80) to prevent title overlapping buttons
+            fig.update_layout(xaxis_title="", yaxis_title="Stock", height=350, margin=dict(l=20, r=20, t=80, b=20))
             st.plotly_chart(fig, use_container_width=True)
             
             # 2. In/Out Tables
