@@ -57,8 +57,9 @@ def load_data_from_sheets():
                 if col in cols_to_numeric:
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        data_inbound['arrival_date'] = pd.to_datetime(data_inbound['arrival_date'], dayfirst=True, errors='coerce').dt.date
-        data_outbound['dispatch_date'] = pd.to_datetime(data_outbound['dispatch_date'], dayfirst=True, errors='coerce').dt.date
+        # FIX: Keep as Timestamp (Removed .dt.date) for robust comparison
+        data_inbound['arrival_date'] = pd.to_datetime(data_inbound['arrival_date'], dayfirst=True, errors='coerce')
+        data_outbound['dispatch_date'] = pd.to_datetime(data_outbound['dispatch_date'], dayfirst=True, errors='coerce')
 
         return data_skus, data_inbound, data_outbound
     except Exception as e:
@@ -68,20 +69,28 @@ def load_data_from_sheets():
 # --- 2. CALCULATION ENGINE ---
 def calculate_inventory(skus, inbound, outbound, start_date, days_to_show):
     if skus.empty: return pd.DataFrame()
-    date_range = [start_date + timedelta(days=x) for x in range(days_to_show)]
+    
+    # FIX: Convert start_date to Pandas Timestamp to match the DataFrames
+    start_ts = pd.to_datetime(start_date)
+    
+    # Create date range as Timestamps
+    date_range = pd.date_range(start=start_ts, periods=days_to_show)
+    
     master_grid = []
     
     for _, sku in skus.iterrows():
         sku_id = sku['sku_id']
         sku_desc = sku['description'] if 'description' in sku and sku['description'] else sku_id
         
-        past_in = inbound[(inbound['sku_id'] == sku_id) & (inbound['arrival_date'] < start_date)]['qty'].sum()
-        past_out = outbound[(outbound['sku_id'] == sku_id) & (outbound['dispatch_date'] < start_date)]['qty'].sum()
+        # Filter using the Timestamp (start_ts)
+        past_in = inbound[(inbound['sku_id'] == sku_id) & (inbound['arrival_date'] < start_ts)]['qty'].sum()
+        past_out = outbound[(outbound['sku_id'] == sku_id) & (outbound['dispatch_date'] < start_ts)]['qty'].sum()
         
         current_stock = sku['stock_on_hand'] + past_in - past_out
         safety_stock = sku['safety_threshold']
         
         for d in date_range:
+            # Compare Timestamp to Timestamp (Robust)
             day_in = inbound[(inbound['sku_id'] == sku_id) & (inbound['arrival_date'] == d)]['qty'].sum()
             day_out = outbound[(outbound['sku_id'] == sku_id) & (outbound['dispatch_date'] == d)]['qty'].sum()
             
@@ -142,6 +151,7 @@ def style_dataframe(df, is_summary=False, column_order=None):
 def format_dates_in_df(df, date_col_name):
     if df.empty or date_col_name not in df.columns: return df
     df_out = df.copy()
+    # Handle Timestamp formatting correctly
     df_out[date_col_name] = pd.to_datetime(df_out[date_col_name]).dt.strftime('%d-%m-%Y')
     return df_out
 
@@ -213,7 +223,6 @@ if not skus.empty:
             fig = px.line(item_data, x='Date', y='Stock', title=f"Stock Projection: {selected_desc}", markers=True)
             fig.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="Zero")
             fig.add_hline(y=safety_level, line_dash="dot", line_color="orange", annotation_text="Safety")
-            # FIX: Increased top margin (t=80) to prevent title overlapping buttons
             fig.update_layout(xaxis_title="", yaxis_title="Stock", height=350, margin=dict(l=20, r=20, t=80, b=20))
             st.plotly_chart(fig, use_container_width=True)
             
